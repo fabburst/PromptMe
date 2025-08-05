@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="fr" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PromptMe : le Prompteur Web Professionnel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://unpkg.com/easymde/dist/easymde.min.css">
+    <script src="https://unpkg.com/easymde/dist/easymde.min.js"></script>
+
+    <style>
+        :root {
+            --bg-light: #f9fafb; --text-light: #111827; --card-bg-light: #ffffff; --border-light: #e5e7eb; --accent-light: #5E81AC; --editor-bg-light: #ffffff;
+            --bg-dark: #2E3440; --text-dark: #ECEFF4; --card-bg-dark: #3B4252; --border-dark: #4C566A; --accent-dark: #81A1C1; --editor-bg-dark: #434C5E;
+        }
+        body { font-family: 'Inter', sans-serif; background-color: var(--main-bg); color: var(--main-text); transition: background-color 0.3s, color 0.3s; }
+        .light { --main-bg: var(--bg-light); --main-text: var(--text-light); --card-bg: var(--card-bg-light); --border-color: var(--border-light); --accent-color: var(--accent-light); --editor-bg: var(--editor-bg-light); }
+        .dark { --main-bg: var(--bg-dark); --main-text: var(--text-dark); --card-bg: var(--card-bg-dark); --border-color: var(--border-dark); --accent-color: var(--accent-dark); --editor-bg: var(--editor-bg-dark); }
+        
+        .themed-bg { background-color: var(--main-bg); }
+        .themed-text { color: var(--main-text); }
+        .themed-card-bg { background-color: var(--card-bg); }
+        .themed-border { border-color: var(--border-color); }
+        .themed-accent-bg { background-color: var(--accent-color); color: var(--bg-dark); }
+        .themed-button-active { box-shadow: 0 0 0 2px var(--accent-color); }
+
+        /* Layout Fix: Main container and editor */
+        .app-container { display: flex; flex-direction: column; height: 100vh; max-height: 100vh; overflow: hidden; }
+        .app-header, .app-footer { flex-shrink: 0; }
+        .app-content { flex-grow: 1; overflow: hidden; display: flex; flex-direction: column; }
+        
+        /* Layout Fix: Make EasyMDE toolbar fixed and editor scrollable */
+        .EasyMDEContainer { flex-grow: 1 !important; display: flex !important; flex-direction: column !important; border: 1px solid var(--border-color); border-radius: 0.5rem; overflow: hidden; }
+        .editor-toolbar { flex-shrink: 0 !important; border-bottom: 1px solid var(--border-color) !important; }
+        .CodeMirror-scroll { flex-grow: 1 !important; }
+        .CodeMirror { flex-grow: 1 !important; height: auto !important; border: none !important; }
+
+        /* Theming for EasyMDE */
+        .EasyMDEContainer, .editor-toolbar, .CodeMirror, .editor-preview, .editor-statusbar { background-color: var(--editor-bg) !important; color: var(--main-text) !important; }
+        .editor-toolbar a { color: var(--main-text) !important; }
+        .editor-toolbar a.active, .editor-toolbar a:hover { background: var(--main-bg) !important; border-color: var(--border-color) !important; }
+        .CodeMirror-cursor { border-left-color: var(--main-text) !important; }
+        
+        .prompter-text-area::-webkit-scrollbar { display: none; }
+        .prompter-text-area { -ms-overflow-style: none; scrollbar-width: none; }
+        #preferences-panel, #history-panel { transition: transform 0.3s ease-in-out; }
+    </style>
+</head>
+<body class="antialiased">
+
+    <div class="app-container">
+        <div id="editor-view" class="flex flex-col h-full themed-bg">
+            <header class="app-header flex items-center justify-between p-3 themed-card-bg border-b themed-border shadow-sm">
+                <h1 class="text-xl font-bold themed-text">Prompteur</h1>
+                <div class="flex items-center gap-4">
+                    <button id="history-btn" class="flex items-center gap-2 text-sm font-semibold py-2 px-3 rounded-lg bg-gray-500/10 hover:bg-gray-500/20 transition-colors">
+                        <svg class="w-5 h-5 themed-text" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 01-9.201-4.42 5.5 5.5 0 011.663-4.42 5.5 5.5 0 018.973 1.663l1.984-1.984a.75.75 0 011.06 1.06l-1.983 1.983A5.5 5.5 0 0115.312 11.424zM8.25 5.5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0V6.25a.75.75 0 01.75-.75z" clip-rule="evenodd" /></svg>
+                        <span class="themed-text">Vos sessions</span>
+                    </button>
+                    <button id="burger-menu-btn" class="p-2 rounded-md hover:bg-gray-500/10"><svg class="w-6 h-6 themed-text" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16m-7 6h7"></path></svg></button>
+                </div>
+            </header>
+
+            <main class="app-content p-4 pt-2">
+                <textarea id="markdown-editor"></textarea>
+            </main>
+
+            <footer class="app-footer p-4 themed-bg border-t themed-border">
+                <button id="start-prompter-btn" class="w-full px-4 py-3 font-bold rounded-lg shadow-md focus:outline-none focus:ring-2 focus:ring-offset-2 transition-colors themed-accent-bg">
+                    Lancer le prompteur
+                </button>
+            </footer>
+        </div>
+
+        <aside id="preferences-panel" class="fixed top-0 right-0 h-full w-80 themed-card-bg shadow-xl z-50 transform translate-x-full border-l themed-border overflow-y-auto">
+             <div class="flex items-center justify-between p-4 border-b themed-border sticky top-0 themed-card-bg">
+                <h2 class="text-lg font-semibold themed-text">Préférences</h2>
+                <button id="close-prefs-btn" class="p-2 rounded-md hover:bg-gray-500/10"><svg class="w-6 h-6 themed-text" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button>
+            </div>
+            <div class="p-6 space-y-6">
+                 <div>
+                    <label class="block mb-2 font-medium text-sm text-gray-500">APPARENCE</label>
+                    <div class="grid grid-cols-2 gap-2"><button id="theme-light-btn" class="p-2 border themed-border rounded-lg">Clair</button><button id="theme-dark-btn" class="p-2 border themed-border rounded-lg">Nord</button></div>
+                </div>
+                <div>
+                    <label class="block mb-2 font-medium text-sm text-gray-500">LECTURE PROMPTEUR</label>
+                    <div class="space-y-4">
+                        <div><label for="font-size-slider" class="block mb-1 font-medium themed-text text-sm">Taille de la police</label><input id="font-size-slider" type="range" min="24" max="120" class="w-full"></div>
+                        <div><label for="margin-slider" class="block mb-1 font-medium themed-text text-sm">Marge horizontale</label><input id="margin-slider" type="range" min="0" max="40" class="w-full"></div>
+                    </div>
+                </div>
+                 <div>
+                    <label class="block mb-2 font-medium text-sm text-gray-500">COMPTEUR MPM</label>
+                    <div class="space-y-4">
+                        <div><label for="wpm-size-slider" class="block mb-1 font-medium themed-text text-sm">Taille du compteur</label><input id="wpm-size-slider" type="range" min="12" max="48" class="w-full"></div>
+                        <div><label for="wpm-top-slider" class="block mb-1 font-medium themed-text text-sm">Position Haut (%)</label><input id="wpm-top-slider" type="range" min="1" max="50" class="w-full"></div>
+                         <div><label for="wpm-right-slider" class="block mb-1 font-medium themed-text text-sm">Position Droite (%)</label><input id="wpm-right-slider" type="range" min="1" max="50" class="w-full"></div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <aside id="history-panel" class="fixed top-0 right-0 h-full w-80 themed-card-bg shadow-xl z-50 transform translate-x-full border-l themed-border overflow-y-auto">
+            <div class="flex items-center justify-between p-4 border-b themed-border sticky top-0 themed-card-bg"><h2 class="text-lg font-semibold themed-text">Vos sessions</h2><button id="close-history-btn" class="p-2 rounded-md hover:bg-gray-500/10"><svg class="w-6 h-6 themed-text" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg></button></div>
+            <div id="history-list-container" class="p-4 space-y-3"></div>
+        </aside>
+
+        <div id="prompter-view" class="fixed inset-0 z-40 flex-col hidden themed-bg">
+            <div id="wpm-counter" class="absolute top-4 right-4 themed-text font-bold p-2 bg-black/20 rounded-lg">180 MPM</div>
+            <div id="prompter-text-area" class="w-full h-full overflow-y-scroll"><div id="prompter-content" class="text-center break-words themed-text"></div></div>
+            <div class="absolute top-1/4 left-0 w-full h-px pointer-events-none"><div class="relative w-full h-full"><div class="absolute left-2 top-1/2 w-4 h-4 -mt-2 -ml-2 rotate-45 bg-red-500 opacity-75"></div><div class="absolute right-2 top-1/2 w-4 h-4 -mt-2 ml-2 rotate-45 bg-red-500 opacity-75"></div></div></div>
+            
+            <div class="absolute bottom-0 left-0 right-0 flex items-center justify-between p-4 sm:px-6 bg-transparent">
+                <div class="flex items-center space-x-2 sm:space-x-4">
+                    <button id="restart-btn" title="Recommencer" class="p-3 rounded-full bg-green-200 text-green-800 dark:bg-green-800/60 dark:text-green-200 hover:bg-green-300 dark:hover:bg-green-800/90 transition-colors">
+                         <svg class="w-6 h-6" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M11.992 4.222c-4.704 0-8.526 3.822-8.526 8.526s3.822 8.526 8.526 8.526 8.526-3.822 8.526-8.526c0-1.608-.447-3.123-1.248-4.434l-1.433 1.433a5.95 5.95 0 0 1 .42 2.993c0 3.297-2.68 5.977-5.977 5.977s-5.977-2.68-5.977-5.977 2.68-5.977 5.977-5.977c1.55 0 2.959.593 4.02 1.566l-2.131 2.131h6.222V3.473l-2.08 2.08A8.478 8.478 0 0 0 11.992 4.222zM10.333 9.444v5.112l4.556-2.556-4.556-2.556z"/></svg>
+                    </button>
+                    <button id="exit-prompter-btn" class="px-4 py-2 text-sm font-semibold text-white bg-red-600 rounded-lg hover:bg-red-700">Quitter</button>
+                </div>
+
+                <div class="flex items-center space-x-2 sm:space-x-3">
+                    <button id="play-pause-btn" class="w-16 h-16 flex items-center justify-center rounded-full shadow-lg themed-accent-bg">
+                        <svg id="play-icon" class="w-8 h-8 text-white pl-1" fill="currentColor" viewBox="0 0 20 20"><path d="M4.555 5.168A1 1 0 003 6v8a1 1 0 001.555.832L13.682 11a1 1 0 000-1.664L4.555 5.168z"/></svg>
+                        <svg id="pause-icon" class="w-8 h-8 text-white hidden" fill="currentColor" viewBox="0 0 20 20"><path d="M5 4h3v12H5V4zm7 0h3v12h-3V4z"/></svg>
+                    </button>
+                    <button id="speed-up-btn" title="Accélérer" class="p-3 rounded-full bg-black/30 hover:bg-black/40 text-white transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                    </button>
+                    <button id="speed-down-btn" title="Ralentir" class="p-3 rounded-full bg-black/30 hover:bg-black/40 text-white transition-colors">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4"></path></svg>
+                    </button>
+                </div>
+                
+                <div class="flex items-center space-x-2 sm:space-x-4 invisible">
+                    <button class="p-3"><svg class="w-6 h-6"></svg></button>
+                    <button class="px-4 py-2">Quitter</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // === DOM Elements ===
+        const editorView = document.getElementById('editor-view');
+        const prompterView = document.getElementById('prompter-view');
+        const startPrompterBtn = document.getElementById('start-prompter-btn');
+        const exitPrompterBtn = document.getElementById('exit-prompter-btn');
+        const playPauseBtn = document.getElementById('play-pause-btn');
+        const playIcon = document.getElementById('play-icon');
+        const pauseIcon = document.getElementById('pause-icon');
+        const restartBtn = document.getElementById('restart-btn');
+        const speedUpBtn = document.getElementById('speed-up-btn');
+        const speedDownBtn = document.getElementById('speed-down-btn');
+        const prompterTextArea = document.getElementById('prompter-text-area');
+        const prompterContent = document.getElementById('prompter-content');
+        const wpmCounter = document.getElementById('wpm-counter');
+
+        const burgerMenuBtn = document.getElementById('burger-menu-btn'), closePrefsBtn = document.getElementById('close-prefs-btn'), preferencesPanel = document.getElementById('preferences-panel');
+        const historyBtn = document.getElementById('history-btn'), closeHistoryBtn = document.getElementById('close-history-btn'), historyPanel = document.getElementById('history-panel'), historyListContainer = document.getElementById('history-list-container');
+        const fontSizeSlider = document.getElementById('font-size-slider'), marginSlider = document.getElementById('margin-slider'), wpmSizeSlider = document.getElementById('wpm-size-slider'), wpmTopSlider = document.getElementById('wpm-top-slider'), wpmRightSlider = document.getElementById('wpm-right-slider');
+        const themeLightBtn = document.getElementById('theme-light-btn'), themeDarkBtn = document.getElementById('theme-dark-btn');
+        
+        let isScrolling = false, scrollSpeed = 1.0, animationFrameId = null, easyMDE;
+        const STORAGE_KEY_TEXT = 'prompter_markdown_text_v8', STORAGE_KEY_SETTINGS = 'prompter_settings_v8', STORAGE_KEY_HISTORY = 'prompter_history_v8';
+
+        function initializeEditor() {
+            easyMDE = new EasyMDE({
+                element: document.getElementById('markdown-editor'), spellChecker: false, status: false,
+                toolbar: ["bold", "italic", "|", "heading-1", "heading-2", "heading-3", "|", "unordered-list", "ordered-list", "|", "preview", "side-by-side", "fullscreen"],
+                placeholder: "Écrivez votre texte en Markdown ici...", maxHeight: "none",
+            });
+            easyMDE.codemirror.on("change", saveState);
+        }
+
+        function saveState() {
+            const settings = { scrollSpeed, fontSize: fontSizeSlider.value, horizontalMargin: marginSlider.value, theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light', wpmSize: wpmSizeSlider.value, wpmTop: wpmTopSlider.value, wpmRight: wpmRightSlider.value };
+            localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings));
+            if(easyMDE && easyMDE.value().trim()) {
+                localStorage.setItem(STORAGE_KEY_TEXT, easyMDE.value());
+                addHistoryEntry(easyMDE.value());
+            } else if (easyMDE) {
+                localStorage.removeItem(STORAGE_KEY_TEXT);
+            }
+        }
+
+        function loadState() {
+            const savedSettings = localStorage.getItem(STORAGE_KEY_SETTINGS);
+            const savedText = localStorage.getItem(STORAGE_KEY_TEXT);
+            if (easyMDE) easyMDE.value(savedText || '');
+            if (savedSettings) {
+                const s = JSON.parse(savedSettings);
+                scrollSpeed = s.scrollSpeed || 1.0;
+                fontSizeSlider.value = s.fontSize || 60; marginSlider.value = s.horizontalMargin || 10;
+                wpmSizeSlider.value = s.wpmSize || 20; wpmTopSlider.value = s.wpmTop || 2; wpmRightSlider.value = s.wpmRight || 2;
+                applyTheme(s.theme || 'light');
+            } else {
+                applyTheme('light');
+                fontSizeSlider.value = 60; marginSlider.value = 10; wpmSizeSlider.value = 20; wpmTopSlider.value = 2; wpmRightSlider.value = 2;
+            }
+            updateAllDisplays();
+        }
+        
+        function updateAllDisplays() { updateSpeedDisplay(); updatePrompterStyles(); updateWpmCounterStyle(); }
+        function updateSpeedDisplay() {
+            const WPM_MIN = 80, WPM_MAX = 350, SPEED_MIN = 0.5, SPEED_MAX = 20.0;
+            const wpm = WPM_MIN + ((scrollSpeed - SPEED_MIN) / (SPEED_MAX - SPEED_MIN)) * (WPM_MAX - WPM_MIN);
+            wpmCounter.textContent = `${Math.round(wpm)} MPM`;
+        }
+        function updatePrompterStyles() { prompterContent.style.fontSize = `${fontSizeSlider.value}px`; prompterContent.style.paddingLeft = `${marginSlider.value}%`; prompterContent.style.paddingRight = `${marginSlider.value}%`; }
+        function updateWpmCounterStyle() { wpmCounter.style.fontSize = `${wpmSizeSlider.value}px`; wpmCounter.style.top = `${wpmTopSlider.value}%`; wpmCounter.style.right = `${wpmRightSlider.value}%`; }
+        function applyTheme(theme) {
+            const html = document.documentElement;
+            html.classList.toggle('dark', theme === 'dark'); html.classList.toggle('light', theme === 'light');
+            themeDarkBtn.classList.toggle('themed-button-active', theme === 'dark'); themeLightBtn.classList.toggle('themed-button-active', theme === 'light');
+        }
+
+        function startPrompter() {
+            const markdownText = easyMDE.value();
+            if (!markdownText.trim()) return;
+            prompterContent.innerHTML = easyMDE.options.previewRender(markdownText);
+            const prompterHeight = prompterTextArea.clientHeight;
+            prompterContent.style.paddingTop = `${prompterHeight * 0.25}px`; prompterContent.style.paddingBottom = `${prompterHeight}px`;
+            prompterTextArea.scrollTop = 0;
+            editorView.style.display = 'none'; prompterView.style.display = 'flex';
+            document.documentElement.requestFullscreen().catch(err => console.log(`Erreur plein écran: ${err.message}`));
+        }
+        function exitPrompter() { stopScrolling(); prompterView.style.display = 'none'; editorView.style.display = 'flex'; if (document.fullscreenElement) document.exitFullscreen(); }
+        function scrollLoop() { if (isScrolling) { prompterTextArea.scrollTop += scrollSpeed / 2; if (prompterTextArea.scrollTop < prompterTextArea.scrollHeight - prompterTextArea.clientHeight) { animationFrameId = requestAnimationFrame(scrollLoop); } else { stopScrolling(); } } }
+        function startScrolling() { if (!isScrolling) { isScrolling = true; playIcon.classList.add('hidden'); pauseIcon.classList.remove('hidden'); animationFrameId = requestAnimationFrame(scrollLoop); } }
+        function stopScrolling() { if (isScrolling) { isScrolling = false; playIcon.classList.remove('hidden'); pauseIcon.classList.add('hidden'); cancelAnimationFrame(animationFrameId); } }
+        function toggleScrolling() { if (isScrolling) stopScrolling(); else startScrolling(); }
+        
+        function openPanel(panel) { panel.classList.remove('translate-x-full'); }
+        function closePanel(panel) { panel.classList.add('translate-x-full'); }
+
+        function getHistory() { return JSON.parse(localStorage.getItem(STORAGE_KEY_HISTORY) || '[]'); }
+        function saveHistory(history) { localStorage.setItem(STORAGE_KEY_HISTORY, JSON.stringify(history)); }
+        function addHistoryEntry(text) {
+            let history = getHistory();
+            const title = text.split('\n')[0].substring(0, 50).replace(/^[#\s*]*/, '') || "Nouveau texte";
+            const existingIndex = history.findIndex(item => item.title === title);
+            if (existingIndex > -1) history.splice(existingIndex, 1);
+            history.unshift({ title: title, text: text, timestamp: Date.now() });
+            if (history.length > 20) history.pop();
+            saveHistory(history);
+        }
+        function renderHistory() {
+            const history = getHistory();
+            historyListContainer.innerHTML = history.length === 0 ? `<p class="text-center text-gray-500 italic">Aucune session récente.</p>` : '';
+            history.forEach(item => {
+                const date = new Date(item.timestamp).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+                const entryEl = document.createElement('div');
+                entryEl.className = 'p-3 rounded-lg bg-gray-500/10 cursor-pointer hover:bg-gray-500/20';
+                entryEl.innerHTML = `<p class="font-semibold truncate themed-text">${item.title}</p><p class="text-sm text-gray-500">${date}</p>`;
+                entryEl.addEventListener('click', () => { easyMDE.value(item.text); closePanel(historyPanel); });
+                historyListContainer.appendChild(entryEl);
+            });
+        }
+
+        startPrompterBtn.addEventListener('click', startPrompter);
+        exitPrompterBtn.addEventListener('click', exitPrompter);
+        playPauseBtn.addEventListener('click', toggleScrolling);
+        restartBtn.addEventListener('click', () => { stopScrolling(); prompterTextArea.scrollTop = 0; });
+        speedUpBtn.addEventListener('click', () => { scrollSpeed = Math.min(20.0, scrollSpeed + 0.5); updateSpeedDisplay(); saveState(); });
+        speedDownBtn.addEventListener('click', () => { scrollSpeed = Math.max(0.5, scrollSpeed - 0.5); updateSpeedDisplay(); saveState(); });
+        
+        burgerMenuBtn.addEventListener('click', () => openPanel(preferencesPanel));
+        closePrefsBtn.addEventListener('click', () => closePanel(preferencesPanel));
+        historyBtn.addEventListener('click', () => { renderHistory(); openPanel(historyPanel); });
+        closeHistoryBtn.addEventListener('click', () => closePanel(historyPanel));
+        
+        themeLightBtn.addEventListener('click', () => { applyTheme('light'); saveState(); });
+        themeDarkBtn.addEventListener('click', () => { applyTheme('dark'); saveState(); });
+
+        [fontSizeSlider, marginSlider].forEach(el => { el.addEventListener('input', updatePrompterStyles); el.addEventListener('change', saveState); });
+        [wpmSizeSlider, wpmTopSlider, wpmRightSlider].forEach(el => { el.addEventListener('input', updateWpmCounterStyle); el.addEventListener('change', saveState); });
+        
+        document.addEventListener('keydown', (e) => {
+            if (prompterView.style.display !== 'flex') return;
+            if (e.key === 'Escape') exitPrompter();
+            if (e.key === ' ') { e.preventDefault(); toggleScrolling(); }
+        });
+
+        initializeEditor();
+        loadState();
+    });
+    </script>
+</body>
+</html>
