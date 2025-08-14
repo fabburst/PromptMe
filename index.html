@@ -60,7 +60,7 @@
         <!-- Editor View -->
         <div id="editor-view" class="flex flex-col h-full themed-bg">
             <header class="app-header flex items-center justify-between p-3 themed-card-bg border-b themed-border shadow-sm">
-                <h1 class="text-xl font-bold themed-text">Prompteur</h1>
+                <h1 class="text-xl font-bold themed-text">PromptMe</h1>
                 <div class="flex items-center gap-4">
                     <button id="history-btn" class="flex items-center gap-2 text-sm font-semibold py-2 px-3 rounded-lg bg-gray-500/10 hover:bg-gray-500/20 transition-colors">
                         <i data-lucide="history" class="w-5 h-5 themed-text"></i>
@@ -129,6 +129,15 @@
                         <button id="mirror-mode-toggle" class="relative inline-flex items-center h-6 rounded-full w-11 transition-colors bg-gray-200 dark:bg-gray-700"><span class="inline-block w-4 h-4 transform bg-white rounded-full transition-transform"></span></button>
                     </div>
                 </div>
+                <div>
+                    <label class="block mb-2 font-medium text-sm text-gray-500">CHRONOMÈTRE</label>
+                    <div class="space-y-2">
+                        <div class="flex items-center justify-between">
+                            <span class="font-medium themed-text text-sm">Raccourci affichage</span>
+                            <input type="text" id="chrono-shortcut-input" readonly class="w-28 p-1 text-center rounded-md themed-bg border themed-border cursor-pointer" title="Cliquez et tapez un nouveau raccourci">
+                        </div>
+                    </div>
+                </div>
             </div>
         </aside>
 
@@ -140,6 +149,7 @@
 
         <!-- Prompter View -->
         <div id="prompter-view" class="fixed inset-0 z-40 flex-col hidden themed-bg">
+            <div id="chronometer" class="absolute top-4 left-4 themed-text font-bold p-2 bg-black/20 rounded-lg text-2xl hidden">00:00</div>
             <div id="wpm-counter" class="absolute top-4 right-4 themed-text font-bold p-2 bg-black/20 rounded-lg text-2xl">180 MPM</div>
             <div id="prompter-text-area" class="w-full h-full overflow-y-scroll"><div id="prompter-content" class="text-center break-words themed-text"></div></div>
             <div class="absolute top-1/4 left-0 w-full h-px pointer-events-none"><div class="relative w-full h-full"><div class="absolute left-2 top-1/2 w-4 h-4 -mt-2 -ml-2 rotate-45 bg-red-500 opacity-75"></div><div class="absolute right-2 top-1/2 w-4 h-4 -mt-2 ml-2 rotate-45 bg-red-500 opacity-75"></div></div></div>
@@ -190,6 +200,7 @@
         const wpmCounter = document.getElementById('wpm-counter');
         const countdownOverlay = document.getElementById('countdown-overlay');
         const countdownText = document.getElementById('countdown-text');
+        const chronometer = document.getElementById('chronometer');
 
         // Panels
         const burgerMenuBtn = document.getElementById('burger-menu-btn'), closePrefsBtn = document.getElementById('close-prefs-btn'), preferencesPanel = document.getElementById('preferences-panel');
@@ -200,6 +211,7 @@
         const fontSizeValue = document.getElementById('font-size-value'), marginValue = document.getElementById('margin-value'), lineHeightValue = document.getElementById('line-height-value');
         const themeLightBtn = document.getElementById('theme-light-btn'), themeDarkBtn = document.getElementById('theme-dark-btn');
         const mirrorModeToggle = document.getElementById('mirror-mode-toggle');
+        const chronoShortcutInput = document.getElementById('chrono-shortcut-input');
 
         // Pacing Guide
         const targetDurationInput = document.getElementById('target-duration');
@@ -208,7 +220,9 @@
         
         // State
         let isScrolling = false, scrollSpeed = 1.0, animationFrameId = null, easyMDE;
-        const STORAGE_KEY_TEXT = 'prompter_markdown_text_v9', STORAGE_KEY_SETTINGS = 'prompter_settings_v9', STORAGE_KEY_HISTORY = 'prompter_history_v9';
+        let chronoIntervalId = null, chronoStartTime = 0, isChronoVisible = false;
+        let chronoShortcut = { key: 't', altKey: false, ctrlKey: true, shiftKey: false }; // Default: Ctrl+T
+        const STORAGE_KEY_TEXT = 'prompter_markdown_text_v9', STORAGE_KEY_SETTINGS = 'prompter_settings_v10', STORAGE_KEY_HISTORY = 'prompter_history_v9';
 
         function initializeEditor() {
             easyMDE = new EasyMDE({
@@ -230,7 +244,8 @@
                 lineHeight: lineHeightSlider.value,
                 theme: document.documentElement.classList.contains('dark') ? 'dark' : 'light',
                 mirrorMode: prompterTextArea.style.transform === 'scaleX(-1)',
-                targetDuration: targetDurationInput.value
+                targetDuration: targetDurationInput.value,
+                chronoShortcut: chronoShortcut
             };
             localStorage.setItem(STORAGE_KEY_SETTINGS, JSON.stringify(settings));
             if(easyMDE && easyMDE.value().trim()) {
@@ -252,6 +267,7 @@
                 marginSlider.value = s.horizontalMargin || 10;
                 lineHeightSlider.value = s.lineHeight || 1.5;
                 targetDurationInput.value = s.targetDuration || 10;
+                chronoShortcut = s.chronoShortcut || { key: 't', altKey: false, ctrlKey: true, shiftKey: false };
                 applyTheme(s.theme || 'light');
                 applyMirrorMode(s.mirrorMode || false);
             } else {
@@ -267,6 +283,7 @@
             updateSpeedDisplay(); 
             updatePrompterStyles();
             updateSettingsDisplay();
+            chronoShortcutInput.value = formatShortcutForDisplay(chronoShortcut);
         }
 
         function updateSettingsDisplay() {
@@ -331,6 +348,35 @@
                 }
             }, 1000);
         }
+        
+        // --- Chronometer Functions ---
+        function formatTime(totalSeconds) {
+            const minutes = Math.floor(totalSeconds / 60);
+            const seconds = totalSeconds % 60;
+            return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+        }
+
+        function updateChronoDisplay() {
+            const elapsedTime = Math.floor((Date.now() - chronoStartTime) / 1000);
+            chronometer.textContent = formatTime(elapsedTime);
+        }
+
+        function startChrono() {
+            chronoStartTime = Date.now();
+            chronometer.textContent = '00:00';
+            isChronoVisible = false;
+            chronometer.classList.add('hidden');
+            if (chronoIntervalId) clearInterval(chronoIntervalId);
+            chronoIntervalId = setInterval(updateChronoDisplay, 1000);
+        }
+
+        function stopChrono() {
+            if (chronoIntervalId) {
+                clearInterval(chronoIntervalId);
+                chronoIntervalId = null;
+            }
+        }
+        // --- End Chronometer Functions ---
 
         function startPrompter() {
             const markdownText = easyMDE.value();
@@ -341,10 +387,11 @@
             prompterTextArea.scrollTop = 0;
             editorView.style.display = 'none'; prompterView.style.display = 'flex';
             document.documentElement.requestFullscreen().catch(err => console.log(`Erreur plein écran: ${err.message}`));
+            startChrono();
             startCountdown(startScrolling);
         }
 
-        function exitPrompter() { stopScrolling(); prompterView.style.display = 'none'; editorView.style.display = 'flex'; if (document.fullscreenElement) document.exitFullscreen(); }
+        function exitPrompter() { stopScrolling(); stopChrono(); prompterView.style.display = 'none'; editorView.style.display = 'flex'; if (document.fullscreenElement) document.exitFullscreen(); }
         function scrollLoop() { if (isScrolling) { prompterTextArea.scrollTop += scrollSpeed / 2; if (prompterTextArea.scrollTop < prompterTextArea.scrollHeight - prompterTextArea.clientHeight) { animationFrameId = requestAnimationFrame(scrollLoop); } else { stopScrolling(); } } }
         function startScrolling() { if (!isScrolling) { isScrolling = true; playIcon.classList.add('hidden'); pauseIcon.classList.remove('hidden'); animationFrameId = requestAnimationFrame(scrollLoop); } }
         function stopScrolling() { if (isScrolling) { isScrolling = false; playIcon.classList.remove('hidden'); pauseIcon.classList.add('hidden'); cancelAnimationFrame(animationFrameId); } }
@@ -377,11 +424,11 @@
             });
         }
 
-        // Event Listeners
+        // --- Event Listeners ---
         startPrompterBtn.addEventListener('click', startPrompter);
         exitPrompterBtn.addEventListener('click', exitPrompter);
         playPauseBtn.addEventListener('click', toggleScrolling);
-        restartBtn.addEventListener('click', () => { stopScrolling(); prompterTextArea.scrollTop = 0; startCountdown(startScrolling); });
+        restartBtn.addEventListener('click', () => { stopScrolling(); prompterTextArea.scrollTop = 0; startChrono(); startCountdown(startScrolling); });
         speedUpBtn.addEventListener('click', () => { scrollSpeed = Math.min(20.0, scrollSpeed + 0.5); updateSpeedDisplay(); saveState(); });
         speedDownBtn.addEventListener('click', () => { scrollSpeed = Math.max(0.5, scrollSpeed - 0.5); updateSpeedDisplay(); saveState(); });
         
@@ -399,26 +446,56 @@
         });
         
         [fontSizeSlider, marginSlider, lineHeightSlider].forEach(el => { 
-            el.addEventListener('input', () => {
-                updatePrompterStyles();
-                updateSettingsDisplay();
-            }); 
+            el.addEventListener('input', () => { updatePrompterStyles(); updateSettingsDisplay(); }); 
             el.addEventListener('change', saveState); 
         });
 
-        targetDurationInput.addEventListener('input', () => {
-            updatePacingGuide();
+        targetDurationInput.addEventListener('input', () => { updatePacingGuide(); saveState(); });
+        
+        // --- Shortcut Input Listener ---
+        function formatShortcutForDisplay(shortcut) {
+            let parts = [];
+            if (shortcut.ctrlKey) parts.push('Ctrl');
+            if (shortcut.altKey) parts.push('Alt');
+            if (shortcut.shiftKey) parts.push('Shift');
+            parts.push(shortcut.key.toUpperCase());
+            return parts.join(' + ');
+        }
+
+        chronoShortcutInput.addEventListener('keydown', (e) => {
+            e.preventDefault();
+            if (['Control', 'Alt', 'Shift', 'Meta'].includes(e.key)) return; // Ignore modifier-only presses
+            chronoShortcut = {
+                key: e.key.toLowerCase(),
+                altKey: e.altKey,
+                ctrlKey: e.ctrlKey,
+                shiftKey: e.shiftKey
+            };
+            chronoShortcutInput.value = formatShortcutForDisplay(chronoShortcut);
             saveState();
         });
-        
+        chronoShortcutInput.addEventListener('focus', () => { chronoShortcutInput.value = "Tapez..."; });
+        chronoShortcutInput.addEventListener('blur', () => { chronoShortcutInput.value = formatShortcutForDisplay(chronoShortcut); });
+
+        // --- Global Keydown Listener ---
         document.addEventListener('keydown', (e) => {
             if (prompterView.style.display !== 'flex') return;
+            
+            // Prompter controls
             if (e.key === 'Escape') exitPrompter();
             if (e.code === 'Space') { e.preventDefault(); toggleScrolling(); }
             if (e.key === 'ArrowUp') { e.preventDefault(); scrollSpeed = Math.min(20.0, scrollSpeed + 0.5); updateSpeedDisplay(); saveState(); }
             if (e.key === 'ArrowDown') { e.preventDefault(); scrollSpeed = Math.max(0.5, scrollSpeed - 0.5); updateSpeedDisplay(); saveState(); }
+
+            // Chronometer toggle
+            if (e.key.toLowerCase() === chronoShortcut.key && e.altKey === chronoShortcut.altKey && e.ctrlKey === chronoShortcut.ctrlKey && e.shiftKey === chronoShortcut.shiftKey) {
+                e.preventDefault();
+                isChronoVisible = !isChronoVisible;
+                chronometer.classList.toggle('hidden', !isChronoVisible);
+            }
         });
 
+        // --- Initialization ---
         lucide.createIcons();
         initializeEditor();
         loadState();
